@@ -3,7 +3,6 @@ local ESP = {}
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local camera = workspace.CurrentCamera
-
 local localPlayer = Players.LocalPlayer
 
 local ESP_SETTINGS = {
@@ -29,6 +28,8 @@ local bones = {
     {"RightLowerLeg", "RightFoot"}
 }
 
+local trackedPlayers = {}
+
 -- Drawing utility
 local function create(class, props)
     local obj = Drawing.new(class)
@@ -38,10 +39,6 @@ local function create(class, props)
     return obj
 end
 
--- ESP storage
-local trackedPlayers = {}
-
--- Cleanup player ESP
 local function cleanupESP(player)
     if trackedPlayers[player] then
         local esp = trackedPlayers[player]
@@ -54,7 +51,6 @@ local function cleanupESP(player)
     end
 end
 
--- Track new player
 local function addESP(player)
     local esp = {
         skeletonlines = {}
@@ -62,7 +58,7 @@ local function addESP(player)
     trackedPlayers[player] = esp
 end
 
--- Setup existing players
+-- Initialize existing players
 for _, p in ipairs(Players:GetPlayers()) do
     if p ~= localPlayer then
         addESP(p)
@@ -79,12 +75,14 @@ Players.PlayerRemoving:Connect(function(p)
     cleanupESP(p)
 end)
 
--- Render step
 RunService.RenderStepped:Connect(function()
     if not ESP_SETTINGS.Enabled then
+        -- Hide all lines if disabled
         for _, esp in pairs(trackedPlayers) do
             for _, bone in ipairs(esp.skeletonlines) do
-                bone.line.Visible = false
+                if bone.line then
+                    bone.line.Visible = false
+                end
             end
         end
         return
@@ -94,11 +92,11 @@ RunService.RenderStepped:Connect(function()
         local char = player.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             if ESP_SETTINGS.ShowSkeletons then
-                -- Create skeleton lines if not created yet
+                -- Create skeleton lines once per player
                 if #esp.skeletonlines == 0 then
                     for _, pair in ipairs(bones) do
                         local line = create("Line", {
-                            Thickness = 1,
+                            Thickness = 2,
                             Color = ESP_SETTINGS.SkeletonsColor,
                             Transparency = 1,
                             Visible = false,
@@ -112,6 +110,7 @@ RunService.RenderStepped:Connect(function()
                     end
                 end
 
+                -- Update lines positions and visibility
                 for _, bone in ipairs(esp.skeletonlines) do
                     local partA = char:FindFirstChild(bone.from)
                     local partB = char:FindFirstChild(bone.to)
@@ -132,17 +131,25 @@ RunService.RenderStepped:Connect(function()
                         bone.line.Visible = false
                     end
                 end
+            else
+                -- Hide skeleton if disabled
+                for _, bone in ipairs(esp.skeletonlines) do
+                    if bone.line then
+                        bone.line.Visible = false
+                    end
+                end
             end
         else
-            -- Hide all lines if character invalid
+            -- Hide all lines if no character or no HumanoidRootPart
             for _, bone in ipairs(esp.skeletonlines) do
-                bone.line.Visible = false
+                if bone.line then
+                    bone.line.Visible = false
+                end
             end
         end
     end
 end)
 
--- API to configure
 function ESP:SetEnabled(state)
     ESP_SETTINGS.Enabled = state
 end
