@@ -1,22 +1,14 @@
+-- crosshairlib.lua
+local CrosshairLib = {}
+
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
-local gui = Instance.new("ScreenGui")
-gui.Name = "CrosshairGui"
-gui.ResetOnSpawn = false
-gui.Parent = player:WaitForChild("PlayerGui")
-
-local center = Instance.new("Frame")
-center.Size = UDim2.new(0, 4, 0, 4)
-center.Position = UDim2.new(0.5, -2, 0.5, -2)
-center.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-center.BorderSizePixel = 0
-center.AnchorPoint = Vector2.new(0.5, 0.5)
-center.Name = "Center"
-center.Parent = gui
-
+local guiName = "CrosshairGui"
+local crosshairGui = nil
+local center = nil
 local parts = {}
 
 local settings = {
@@ -46,37 +38,85 @@ local function createLine(offsetX, offsetY, sizeX, sizeY)
     table.insert(parts, part)
 end
 
-local function drawCrosshair()
+function CrosshairLib:Init()
+    -- Remove old GUI if already created
+    self:Destroy()
+
+    crosshairGui = Instance.new("ScreenGui")
+    crosshairGui.Name = guiName
+    crosshairGui.ResetOnSpawn = false
+    crosshairGui.Parent = player:WaitForChild("PlayerGui")
+
+    center = Instance.new("Frame")
+    center.Size = UDim2.new(0, 4, 0, 4)
+    center.Position = UDim2.new(0.5, -2, 0.5, -2)
+    center.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    center.BorderSizePixel = 0
+    center.AnchorPoint = Vector2.new(0.5, 0.5)
+    center.Name = "Center"
+    center.Parent = crosshairGui
+
     clearParts()
 
     local g = settings.Gap
     local l = settings.Length
     local t = settings.Thickness
 
-    -- Top, Bottom, Left, Right
-    createLine(0, -(g + l / 2), t, l)
-    createLine(0, g + l / 2, t, l)
-    createLine(-(g + l / 2), 0, l, t)
-    createLine(g + l / 2, 0, l, t)
+    -- Create crosshair lines
+    createLine(0, -(g + l / 2), t, l)  -- Top
+    createLine(0, (g + l / 2), t, l)   -- Bottom
+    createLine(-(g + l / 2), 0, l, t)  -- Left
+    createLine((g + l / 2), 0, l, t)   -- Right
 
+    -- Enable spinning if applicable
     if settings.Spin then
         RunService:UnbindFromRenderStep("CrosshairSpin")
         RunService:BindToRenderStep("CrosshairSpin", Enum.RenderPriority.Last.Value, function(dt)
-            center.Rotation += settings.SpinSpeed * dt
+            if center then
+                center.Rotation += settings.SpinSpeed * dt
+            end
         end)
     else
         RunService:UnbindFromRenderStep("CrosshairSpin")
-        center.Rotation = 0
+        if center then
+            center.Rotation = 0
+        end
     end
 end
 
--- CONFIGURE YOUR CROSSHAIR SETTINGS HERE
-settings.Color = Color3.new(1, 0, 0) -- Red
-settings.Thickness = 3
-settings.Length = 12
-settings.Gap = 5
-settings.Spin = true
-settings.SpinSpeed = 180
+function CrosshairLib:SetColor(color)
+    settings.Color = color
+end
 
--- Draw it
-drawCrosshair()
+function CrosshairLib:SetThickness(value)
+    settings.Thickness = value
+end
+
+function CrosshairLib:SetLength(value)
+    settings.Length = value
+end
+
+function CrosshairLib:SetGap(value)
+    settings.Gap = value
+end
+
+function CrosshairLib:SetSpin(value)
+    settings.Spin = value
+end
+
+function CrosshairLib:SetSpinSpeed(value)
+    settings.SpinSpeed = value
+end
+
+function CrosshairLib:Destroy()
+    RunService:UnbindFromRenderStep("CrosshairSpin")
+
+    if crosshairGui then
+        crosshairGui:Destroy()
+        crosshairGui = nil
+        center = nil
+        parts = {}
+    end
+end
+
+return CrosshairLib
