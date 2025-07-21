@@ -1,4 +1,4 @@
-local BoxESP = {}
+local ESP = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,8 +6,10 @@ local Camera = workspace.CurrentCamera
 
 local localPlayer = Players.LocalPlayer
 
--- Settings
-local ESPSettings = {
+-- BoxESP internal settings and data
+local BoxESP = {}
+
+BoxESP.ESPSettings = {
     Enabled = true,
     BoxColor = Color3.fromRGB(0, 255, 0),
     BoxThickness = 2,
@@ -18,7 +20,6 @@ local ESPSettings = {
     ShowSkeleton = true,
 }
 
--- R6 skeleton bones (joints)
 local R6Bones = {
     {"Head", "Torso"},
     {"Torso", "Left Arm"},
@@ -33,7 +34,6 @@ local R6Bones = {
     {"Right Leg", "Right Foot"},
 }
 
--- R15 skeleton bones (more complex rig)
 local R15Bones = {
     {"Head", "UpperTorso"},
     {"UpperTorso", "LowerTorso"},
@@ -51,8 +51,7 @@ local R15Bones = {
     {"RightLowerLeg", "RightFoot"},
 }
 
--- Store Drawing objects per player
-local trackedPlayers = {}
+BoxESP.trackedPlayers = {}
 
 local function create(class, props)
     local obj = Drawing.new(class)
@@ -62,19 +61,19 @@ local function create(class, props)
     return obj
 end
 
-local function addESP(player)
+function BoxESP:addESP(player)
     local data = {}
 
     data.Box = create("Square", {
-        Thickness = ESPSettings.BoxThickness,
-        Color = ESPSettings.BoxColor,
+        Thickness = self.ESPSettings.BoxThickness,
+        Color = self.ESPSettings.BoxColor,
         Filled = false,
         Visible = false,
         ZIndex = 2
     })
 
     data.Name = create("Text", {
-        Color = ESPSettings.NameColor,
+        Color = self.ESPSettings.NameColor,
         Size = 16,
         Center = true,
         Outline = true,
@@ -99,14 +98,13 @@ local function addESP(player)
         ZIndex = 3
     })
 
-    -- For skeleton lines
     data.SkeletonLines = {}
 
-    trackedPlayers[player] = data
+    self.trackedPlayers[player] = data
 end
 
-local function removeESP(player)
-    local data = trackedPlayers[player]
+function BoxESP:removeESP(player)
+    local data = self.trackedPlayers[player]
     if data then
         data.Box:Remove()
         data.Name:Remove()
@@ -115,27 +113,11 @@ local function removeESP(player)
         for _, line in pairs(data.SkeletonLines) do
             line:Remove()
         end
-        trackedPlayers[player] = nil
+        self.trackedPlayers[player] = nil
     end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= localPlayer then
-        addESP(player)
-    end
-end
-
-Players.PlayerAdded:Connect(function(player)
-    if player ~= localPlayer then
-        addESP(player)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    removeESP(player)
-end)
-
-local function getCharacterParts(character)
+function BoxESP:getCharacterParts(character)
     local parts = {}
     for _, part in ipairs(character:GetChildren()) do
         if part:IsA("BasePart") then
@@ -145,21 +127,19 @@ local function getCharacterParts(character)
     return parts
 end
 
-local function isR15(character)
-    -- Heuristic: R15 has LowerTorso and UpperTorso parts
+function BoxESP:isR15(character)
     return character:FindFirstChild("LowerTorso") and character:FindFirstChild("UpperTorso")
 end
 
-local function drawSkeleton(char, data)
-    local bonesTable = isR15(char) and R15Bones or R6Bones
+function BoxESP:drawSkeleton(char, data)
+    local bonesTable = self:isR15(char) and R15Bones or R6Bones
     local lines = data.SkeletonLines
 
-    -- Create lines if none exist
     if #lines == 0 then
         for _ = 1, #bonesTable do
             local line = create("Line", {
-                Color = ESPSettings.SkeletonColor,
-                Thickness = ESPSettings.SkeletonThickness,
+                Color = self.ESPSettings.SkeletonColor,
+                Thickness = self.ESPSettings.SkeletonThickness,
                 Transparency = 1,
                 Visible = false,
                 ZIndex = 3,
@@ -182,8 +162,8 @@ local function drawSkeleton(char, data)
                 line.From = Vector2.new(fromPos.X, fromPos.Y)
                 line.To = Vector2.new(toPos.X, toPos.Y)
                 line.Visible = true
-                line.Color = ESPSettings.SkeletonColor
-                line.Thickness = ESPSettings.SkeletonThickness
+                line.Color = self.ESPSettings.SkeletonColor
+                line.Thickness = self.ESPSettings.SkeletonThickness
             else
                 line.Visible = false
             end
@@ -193,9 +173,27 @@ local function drawSkeleton(char, data)
     end
 end
 
+-- Initialization: add ESP for existing players
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= localPlayer then
+        BoxESP:addESP(player)
+    end
+end
+
+-- Player added/removed handlers
+Players.PlayerAdded:Connect(function(player)
+    if player ~= localPlayer then
+        BoxESP:addESP(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    BoxESP:removeESP(player)
+end)
+
 RunService.RenderStepped:Connect(function()
-    if not ESPSettings.Enabled then
-        for _, data in pairs(trackedPlayers) do
+    if not BoxESP.ESPSettings.Enabled then
+        for _, data in pairs(BoxESP.trackedPlayers) do
             data.Box.Visible = false
             data.Name.Visible = false
             data.HealthBar.Visible = false
@@ -207,18 +205,17 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    for player, data in pairs(trackedPlayers) do
+    for player, data in pairs(BoxESP.trackedPlayers) do
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                local parts = getCharacterParts(char)
+                local parts = BoxESP:getCharacterParts(char)
 
                 local onScreen = false
                 local minX, minY = math.huge, math.huge
                 local maxX, maxY = -math.huge, -math.huge
 
-                -- Calculate bounding box
                 for _, part in ipairs(parts) do
                     local pos, vis = Camera:WorldToViewportPoint(part.Position)
                     if vis then
@@ -237,34 +234,34 @@ RunService.RenderStepped:Connect(function()
                     -- Box
                     data.Box.Size = Vector2.new(width, height)
                     data.Box.Position = Vector2.new(minX, minY)
-                    data.Box.Color = ESPSettings.BoxColor
+                    data.Box.Color = BoxESP.ESPSettings.BoxColor
                     data.Box.Visible = true
 
                     -- Name tag
                     data.Name.Text = player.Name
                     data.Name.Position = Vector2.new(minX + width / 2, minY - 18)
+                    data.Name.Color = BoxESP.ESPSettings.NameColor
                     data.Name.Visible = true
 
                     -- Health bar left side
-                    data.HealthBarBG.Size = Vector2.new(ESPSettings.HealthBarWidth, height)
-                    data.HealthBarBG.Position = Vector2.new(minX - ESPSettings.HealthBarWidth - 5, minY)
+                    data.HealthBarBG.Size = Vector2.new(BoxESP.ESPSettings.HealthBarWidth, height)
+                    data.HealthBarBG.Position = Vector2.new(minX - BoxESP.ESPSettings.HealthBarWidth - 5, minY)
                     data.HealthBarBG.Visible = true
 
                     local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
-                    data.HealthBar.Size = Vector2.new(ESPSettings.HealthBarWidth, height * healthPercent)
+                    data.HealthBar.Size = Vector2.new(BoxESP.ESPSettings.HealthBarWidth, height * healthPercent)
                     data.HealthBar.Position = Vector2.new(data.HealthBarBG.Position.X, minY + height * (1 - healthPercent))
                     data.HealthBar.Visible = true
 
                     -- Skeleton
-                    if ESPSettings.ShowSkeleton then
-                        drawSkeleton(char, data)
+                    if BoxESP.ESPSettings.ShowSkeleton then
+                        BoxESP:drawSkeleton(char, data)
                     else
                         for _, line in pairs(data.SkeletonLines) do
                             line.Visible = false
                         end
                     end
                 else
-                    -- Hide all if offscreen
                     data.Box.Visible = false
                     data.Name.Visible = false
                     data.HealthBar.Visible = false
@@ -274,7 +271,6 @@ RunService.RenderStepped:Connect(function()
                     end
                 end
             else
-                -- Hide if no humanoid
                 data.Box.Visible = false
                 data.Name.Visible = false
                 data.HealthBar.Visible = false
@@ -284,7 +280,6 @@ RunService.RenderStepped:Connect(function()
                 end
             end
         else
-            -- Hide if no character
             data.Box.Visible = false
             data.Name.Visible = false
             data.HealthBar.Visible = false
@@ -296,39 +291,79 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- API functions
+-- BoxESP API methods
+
 function BoxESP:SetEnabled(state)
-    ESPSettings.Enabled = state
+    self.ESPSettings.Enabled = state
 end
 
 function BoxESP:SetBoxColor(color)
-    ESPSettings.BoxColor = color
-    for _, data in pairs(trackedPlayers) do
+    self.ESPSettings.BoxColor = color
+    for _, data in pairs(self.trackedPlayers) do
         data.Box.Color = color
     end
 end
 
 function BoxESP:SetHealthBarWidth(width)
-    ESPSettings.HealthBarWidth = width
+    self.ESPSettings.HealthBarWidth = width
 end
 
 function BoxESP:SetNameColor(color)
-    ESPSettings.NameColor = color
-    for _, data in pairs(trackedPlayers) do
+    self.ESPSettings.NameColor = color
+    for _, data in pairs(self.trackedPlayers) do
         data.Name.Color = color
     end
 end
 
 function BoxESP:SetSkeletonColor(color)
-    ESPSettings.SkeletonColor = color
+    self.ESPSettings.SkeletonColor = color
 end
 
 function BoxESP:SetSkeletonThickness(thickness)
-    ESPSettings.SkeletonThickness = thickness
+    self.ESPSettings.SkeletonThickness = thickness
 end
 
 function BoxESP:SetShowSkeleton(state)
-    ESPSettings.ShowSkeleton = state
+    self.ESPSettings.ShowSkeleton = state
 end
 
-return BoxESP
+function BoxESP:SetSkeletonColor(color)
+    self.ESPSettings.SkeletonColor = color
+    for _, data in pairs(self.trackedPlayers) do
+        for _, line in pairs(data.SkeletonLines) do
+            line.Color = color
+        end
+    end
+end
+
+-- Expose API from ESP module with BoxESP prefix
+
+function ESP:BoxESPEnabled(state)
+    BoxESP:SetEnabled(state)
+end
+
+function ESP:BoxESPSetBoxColor(color)
+    BoxESP:SetBoxColor(color)
+end
+
+function ESP:BoxESPSetHealthBarWidth(width)
+    BoxESP:SetHealthBarWidth(width)
+end
+
+function ESP:BoxESPSetNameColor(color)
+    BoxESP:SetNameColor(color)
+end
+
+function ESP:BoxESPSetSkeletonColor(color)
+    BoxESP:SetSkeletonColor(color)
+end
+
+function ESP:BoxESPSetSkeletonThickness(thickness)
+    BoxESP:SetSkeletonThickness(thickness)
+end
+
+function ESP:BoxESPSetShowSkeleton(state)
+    BoxESP:SetShowSkeleton(state)
+end
+
+return ESP
