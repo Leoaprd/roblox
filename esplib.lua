@@ -7,18 +7,18 @@ local Camera = workspace.CurrentCamera
 local localPlayer = Players.LocalPlayer
 
 ESP.ESPSettings = {
-    Enabled = false,
-    LocalPlayerESPEnabled = false,      -- toggle local player ESP
-    BoxESPEnabled = false,
+    Enabled = true,
+    LocalPlayerESPEnabled = true,      -- toggle local player ESP
+    BoxESPEnabled = true,
     BoxType = "Box",                    -- "Box" or "Corner" (currently only Box implemented)
     BoxESPSetBoxThickness = 2,
-    BoxESPSetBoxFilled = false,
-    HealthBarEnabled = false,
+    BoxESPSetBoxFilled = true,
+    HealthBarEnabled = true,
     HealthBarColor = Color3.fromRGB(255, 0, 0),
     HealthBarWidth = 5,
-    NameTagEnabled = false,
+    NameTagEnabled = true,
     NameTagColor = Color3.fromRGB(255, 255, 255),
-    SkeletonEnabled = false,
+    SkeletonEnabled = true,
     SkeletonColor = Color3.fromRGB(0, 255, 0),
     SkeletonThickness = 1,
 }
