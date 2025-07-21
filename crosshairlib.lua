@@ -1,8 +1,6 @@
--- crosshairlib.lua
 local CrosshairLib = {}
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 
@@ -19,6 +17,8 @@ local settings = {
     Spin = false,
     SpinSpeed = 90,
 }
+
+local spinConnection
 
 local function clearParts()
     for _, v in ipairs(parts) do
@@ -38,8 +38,55 @@ local function createLine(offsetX, offsetY, sizeX, sizeY)
     table.insert(parts, part)
 end
 
+local function updatePartsAppearance()
+    if not center then return end
+
+    -- Update color
+    for _, part in ipairs(parts) do
+        part.BackgroundColor3 = settings.Color
+    end
+
+    -- Update positions and sizes
+    local g = settings.Gap
+    local l = settings.Length
+    local t = settings.Thickness
+
+    parts[1].Size = UDim2.new(0, t, 0, l)          -- Top line
+    parts[1].Position = UDim2.new(0.5, 0, 0.5, -(g + l / 2))
+
+    parts[2].Size = UDim2.new(0, t, 0, l)          -- Bottom line
+    parts[2].Position = UDim2.new(0.5, 0, 0.5, g + l / 2)
+
+    parts[3].Size = UDim2.new(0, l, 0, t)          -- Left line
+    parts[3].Position = UDim2.new(0.5, -(g + l / 2), 0.5, 0)
+
+    parts[4].Size = UDim2.new(0, l, 0, t)          -- Right line
+    parts[4].Position = UDim2.new(0.5, g + l / 2, 0.5, 0)
+end
+
+local function startSpin()
+    if spinConnection then
+        spinConnection:Disconnect()
+        spinConnection = nil
+    end
+    spinConnection = RunService:BindToRenderStep("CrosshairSpin", Enum.RenderPriority.Last.Value, function(dt)
+        if center and settings.Spin then
+            center.Rotation = (center.Rotation + settings.SpinSpeed * dt) % 360
+        end
+    end)
+end
+
+local function stopSpin()
+    if spinConnection then
+        spinConnection:Disconnect()
+        spinConnection = nil
+    end
+    if center then
+        center.Rotation = 0
+    end
+end
+
 function CrosshairLib:Init()
-    -- Remove old GUI if already created
     self:Destroy()
 
     crosshairGui = Instance.new("ScreenGui")
@@ -62,60 +109,72 @@ function CrosshairLib:Init()
     local l = settings.Length
     local t = settings.Thickness
 
-    -- Create crosshair lines
     createLine(0, -(g + l / 2), t, l)  -- Top
     createLine(0, (g + l / 2), t, l)   -- Bottom
     createLine(-(g + l / 2), 0, l, t)  -- Left
     createLine((g + l / 2), 0, l, t)   -- Right
 
-    -- Enable spinning if applicable
+    updatePartsAppearance()
+
     if settings.Spin then
-        RunService:UnbindFromRenderStep("CrosshairSpin")
-        RunService:BindToRenderStep("CrosshairSpin", Enum.RenderPriority.Last.Value, function(dt)
-            if center then
-                center.Rotation += settings.SpinSpeed * dt
-            end
-        end)
+        startSpin()
     else
-        RunService:UnbindFromRenderStep("CrosshairSpin")
-        if center then
-            center.Rotation = 0
-        end
+        stopSpin()
     end
 end
 
 function CrosshairLib:SetColor(color)
     settings.Color = color
+    if crosshairGui then
+        updatePartsAppearance()
+    end
 end
 
 function CrosshairLib:SetThickness(value)
     settings.Thickness = value
+    if crosshairGui then
+        updatePartsAppearance()
+    end
 end
 
 function CrosshairLib:SetLength(value)
     settings.Length = value
+    if crosshairGui then
+        updatePartsAppearance()
+    end
 end
 
 function CrosshairLib:SetGap(value)
     settings.Gap = value
+    if crosshairGui then
+        updatePartsAppearance()
+    end
 end
 
 function CrosshairLib:SetSpin(value)
     settings.Spin = value
+    if crosshairGui then
+        if value then
+            startSpin()
+        else
+            stopSpin()
+        end
+    end
 end
 
 function CrosshairLib:SetSpinSpeed(value)
     settings.SpinSpeed = value
+    -- No need to restart spin, speed will be used automatically next frame
 end
 
 function CrosshairLib:Destroy()
-    RunService:UnbindFromRenderStep("CrosshairSpin")
+    stopSpin()
 
     if crosshairGui then
         crosshairGui:Destroy()
         crosshairGui = nil
         center = nil
-        parts = {}
+        clearParts()
     end
 end
 
