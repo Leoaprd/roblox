@@ -1,17 +1,40 @@
-local ESP = {}
+local BoxESP = {}
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local camera = workspace.CurrentCamera
+local Camera = workspace.CurrentCamera
+
 local localPlayer = Players.LocalPlayer
 
-local ESP_SETTINGS = {
+-- Settings
+local ESPSettings = {
     Enabled = true,
-    ShowSkeletons = true,
-    SkeletonsColor = Color3.fromRGB(0, 255, 0)
+    BoxColor = Color3.fromRGB(0, 255, 0),
+    BoxThickness = 2,
+    HealthBarWidth = 5,
+    NameColor = Color3.fromRGB(255, 255, 255),
+    SkeletonColor = Color3.fromRGB(0, 255, 0),
+    SkeletonThickness = 1,
+    ShowSkeleton = true,
 }
 
-local bones = {
+-- R6 skeleton bones (joints)
+local R6Bones = {
+    {"Head", "Torso"},
+    {"Torso", "Left Arm"},
+    {"Left Arm", "Left Forearm"},
+    {"Left Forearm", "Left Hand"},
+    {"Torso", "Right Arm"},
+    {"Right Arm", "Right Forearm"},
+    {"Right Forearm", "Right Hand"},
+    {"Torso", "Left Leg"},
+    {"Left Leg", "Left Foot"},
+    {"Torso", "Right Leg"},
+    {"Right Leg", "Right Foot"},
+}
+
+-- R15 skeleton bones (more complex rig)
+local R15Bones = {
     {"Head", "UpperTorso"},
     {"UpperTorso", "LowerTorso"},
     {"UpperTorso", "LeftUpperArm"},
@@ -25,141 +48,287 @@ local bones = {
     {"LeftLowerLeg", "LeftFoot"},
     {"LowerTorso", "RightUpperLeg"},
     {"RightUpperLeg", "RightLowerLeg"},
-    {"RightLowerLeg", "RightFoot"}
+    {"RightLowerLeg", "RightFoot"},
 }
 
+-- Store Drawing objects per player
 local trackedPlayers = {}
 
--- Drawing utility
 local function create(class, props)
     local obj = Drawing.new(class)
-    for i, v in pairs(props) do
-        obj[i] = v
+    for k, v in pairs(props) do
+        obj[k] = v
     end
     return obj
 end
 
-local function cleanupESP(player)
-    if trackedPlayers[player] then
-        local esp = trackedPlayers[player]
-        for _, bone in ipairs(esp.skeletonlines or {}) do
-            if bone.line then
-                bone.line:Remove()
-            end
+local function addESP(player)
+    local data = {}
+
+    data.Box = create("Square", {
+        Thickness = ESPSettings.BoxThickness,
+        Color = ESPSettings.BoxColor,
+        Filled = false,
+        Visible = false,
+        ZIndex = 2
+    })
+
+    data.Name = create("Text", {
+        Color = ESPSettings.NameColor,
+        Size = 16,
+        Center = true,
+        Outline = true,
+        Visible = false,
+        ZIndex = 2,
+        Text = player.Name
+    })
+
+    data.HealthBarBG = create("Square", {
+        Color = Color3.fromRGB(0, 0, 0),
+        Thickness = 1,
+        Filled = true,
+        Visible = false,
+        ZIndex = 2
+    })
+
+    data.HealthBar = create("Square", {
+        Color = Color3.fromRGB(255, 0, 0),
+        Thickness = 0,
+        Filled = true,
+        Visible = false,
+        ZIndex = 3
+    })
+
+    -- For skeleton lines
+    data.SkeletonLines = {}
+
+    trackedPlayers[player] = data
+end
+
+local function removeESP(player)
+    local data = trackedPlayers[player]
+    if data then
+        data.Box:Remove()
+        data.Name:Remove()
+        data.HealthBar:Remove()
+        data.HealthBarBG:Remove()
+        for _, line in pairs(data.SkeletonLines) do
+            line:Remove()
         end
         trackedPlayers[player] = nil
     end
 end
 
-local function addESP(player)
-    local esp = {
-        skeletonlines = {}
-    }
-    trackedPlayers[player] = esp
-end
-
--- Initialize existing players
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= localPlayer then
-        addESP(p)
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= localPlayer then
+        addESP(player)
     end
 end
 
-Players.PlayerAdded:Connect(function(p)
-    if p ~= localPlayer then
-        addESP(p)
+Players.PlayerAdded:Connect(function(player)
+    if player ~= localPlayer then
+        addESP(player)
     end
 end)
 
-Players.PlayerRemoving:Connect(function(p)
-    cleanupESP(p)
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
 end)
+
+local function getCharacterParts(character)
+    local parts = {}
+    for _, part in ipairs(character:GetChildren()) do
+        if part:IsA("BasePart") then
+            table.insert(parts, part)
+        end
+    end
+    return parts
+end
+
+local function isR15(character)
+    -- Heuristic: R15 has LowerTorso and UpperTorso parts
+    return character:FindFirstChild("LowerTorso") and character:FindFirstChild("UpperTorso")
+end
+
+local function drawSkeleton(char, data)
+    local bonesTable = isR15(char) and R15Bones or R6Bones
+    local lines = data.SkeletonLines
+
+    -- Create lines if none exist
+    if #lines == 0 then
+        for _ = 1, #bonesTable do
+            local line = create("Line", {
+                Color = ESPSettings.SkeletonColor,
+                Thickness = ESPSettings.SkeletonThickness,
+                Transparency = 1,
+                Visible = false,
+                ZIndex = 3,
+            })
+            table.insert(lines, line)
+        end
+    end
+
+    for i, bone in ipairs(bonesTable) do
+        local fromPart = char:FindFirstChild(bone[1])
+        local toPart = char:FindFirstChild(bone[2])
+
+        local line = lines[i]
+
+        if fromPart and toPart then
+            local fromPos, fromVis = Camera:WorldToViewportPoint(fromPart.Position)
+            local toPos, toVis = Camera:WorldToViewportPoint(toPart.Position)
+
+            if fromVis and toVis then
+                line.From = Vector2.new(fromPos.X, fromPos.Y)
+                line.To = Vector2.new(toPos.X, toPos.Y)
+                line.Visible = true
+                line.Color = ESPSettings.SkeletonColor
+                line.Thickness = ESPSettings.SkeletonThickness
+            else
+                line.Visible = false
+            end
+        else
+            line.Visible = false
+        end
+    end
+end
 
 RunService.RenderStepped:Connect(function()
-    if not ESP_SETTINGS.Enabled then
-        -- Hide all lines if disabled
-        for _, esp in pairs(trackedPlayers) do
-            for _, bone in ipairs(esp.skeletonlines) do
-                if bone.line then
-                    bone.line.Visible = false
-                end
+    if not ESPSettings.Enabled then
+        for _, data in pairs(trackedPlayers) do
+            data.Box.Visible = false
+            data.Name.Visible = false
+            data.HealthBar.Visible = false
+            data.HealthBarBG.Visible = false
+            for _, line in pairs(data.SkeletonLines) do
+                line.Visible = false
             end
         end
         return
     end
 
-    for player, esp in pairs(trackedPlayers) do
+    for player, data in pairs(trackedPlayers) do
         local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            if ESP_SETTINGS.ShowSkeletons then
-                -- Create skeleton lines once per player
-                if #esp.skeletonlines == 0 then
-                    for _, pair in ipairs(bones) do
-                        local line = create("Line", {
-                            Thickness = 2,
-                            Color = ESP_SETTINGS.SkeletonsColor,
-                            Transparency = 1,
-                            Visible = false,
-                            ZIndex = 2
-                        })
-                        table.insert(esp.skeletonlines, {
-                            line = line,
-                            from = pair[1],
-                            to = pair[2]
-                        })
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                local parts = getCharacterParts(char)
+
+                local onScreen = false
+                local minX, minY = math.huge, math.huge
+                local maxX, maxY = -math.huge, -math.huge
+
+                -- Calculate bounding box
+                for _, part in ipairs(parts) do
+                    local pos, vis = Camera:WorldToViewportPoint(part.Position)
+                    if vis then
+                        onScreen = true
+                        if pos.X < minX then minX = pos.X end
+                        if pos.Y < minY then minY = pos.Y end
+                        if pos.X > maxX then maxX = pos.X end
+                        if pos.Y > maxY then maxY = pos.Y end
                     end
                 end
 
-                -- Update lines positions and visibility
-                for _, bone in ipairs(esp.skeletonlines) do
-                    local partA = char:FindFirstChild(bone.from)
-                    local partB = char:FindFirstChild(bone.to)
+                if onScreen and minX < maxX and minY < maxY then
+                    local width = maxX - minX
+                    local height = maxY - minY
 
-                    if partA and partB then
-                        local aPos, onScreenA = camera:WorldToViewportPoint(partA.Position)
-                        local bPos, onScreenB = camera:WorldToViewportPoint(partB.Position)
+                    -- Box
+                    data.Box.Size = Vector2.new(width, height)
+                    data.Box.Position = Vector2.new(minX, minY)
+                    data.Box.Color = ESPSettings.BoxColor
+                    data.Box.Visible = true
 
-                        if onScreenA and onScreenB then
-                            bone.line.From = Vector2.new(aPos.X, aPos.Y)
-                            bone.line.To = Vector2.new(bPos.X, bPos.Y)
-                            bone.line.Color = ESP_SETTINGS.SkeletonsColor
-                            bone.line.Visible = true
-                        else
-                            bone.line.Visible = false
-                        end
+                    -- Name tag
+                    data.Name.Text = player.Name
+                    data.Name.Position = Vector2.new(minX + width / 2, minY - 18)
+                    data.Name.Visible = true
+
+                    -- Health bar left side
+                    data.HealthBarBG.Size = Vector2.new(ESPSettings.HealthBarWidth, height)
+                    data.HealthBarBG.Position = Vector2.new(minX - ESPSettings.HealthBarWidth - 5, minY)
+                    data.HealthBarBG.Visible = true
+
+                    local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                    data.HealthBar.Size = Vector2.new(ESPSettings.HealthBarWidth, height * healthPercent)
+                    data.HealthBar.Position = Vector2.new(data.HealthBarBG.Position.X, minY + height * (1 - healthPercent))
+                    data.HealthBar.Visible = true
+
+                    -- Skeleton
+                    if ESPSettings.ShowSkeleton then
+                        drawSkeleton(char, data)
                     else
-                        bone.line.Visible = false
+                        for _, line in pairs(data.SkeletonLines) do
+                            line.Visible = false
+                        end
+                    end
+                else
+                    -- Hide all if offscreen
+                    data.Box.Visible = false
+                    data.Name.Visible = false
+                    data.HealthBar.Visible = false
+                    data.HealthBarBG.Visible = false
+                    for _, line in pairs(data.SkeletonLines) do
+                        line.Visible = false
                     end
                 end
             else
-                -- Hide skeleton if disabled
-                for _, bone in ipairs(esp.skeletonlines) do
-                    if bone.line then
-                        bone.line.Visible = false
-                    end
+                -- Hide if no humanoid
+                data.Box.Visible = false
+                data.Name.Visible = false
+                data.HealthBar.Visible = false
+                data.HealthBarBG.Visible = false
+                for _, line in pairs(data.SkeletonLines) do
+                    line.Visible = false
                 end
             end
         else
-            -- Hide all lines if no character or no HumanoidRootPart
-            for _, bone in ipairs(esp.skeletonlines) do
-                if bone.line then
-                    bone.line.Visible = false
-                end
+            -- Hide if no character
+            data.Box.Visible = false
+            data.Name.Visible = false
+            data.HealthBar.Visible = false
+            data.HealthBarBG.Visible = false
+            for _, line in pairs(data.SkeletonLines) do
+                line.Visible = false
             end
         end
     end
 end)
 
-function ESP:SetEnabled(state)
-    ESP_SETTINGS.Enabled = state
+-- API functions
+function BoxESP:SetEnabled(state)
+    ESPSettings.Enabled = state
 end
 
-function ESP:SetSkeletons(state)
-    ESP_SETTINGS.ShowSkeletons = state
+function BoxESP:SetBoxColor(color)
+    ESPSettings.BoxColor = color
+    for _, data in pairs(trackedPlayers) do
+        data.Box.Color = color
+    end
 end
 
-function ESP:SetSkeletonColor(color)
-    ESP_SETTINGS.SkeletonsColor = color
+function BoxESP:SetHealthBarWidth(width)
+    ESPSettings.HealthBarWidth = width
 end
 
-return ESP
+function BoxESP:SetNameColor(color)
+    ESPSettings.NameColor = color
+    for _, data in pairs(trackedPlayers) do
+        data.Name.Color = color
+    end
+end
+
+function BoxESP:SetSkeletonColor(color)
+    ESPSettings.SkeletonColor = color
+end
+
+function BoxESP:SetSkeletonThickness(thickness)
+    ESPSettings.SkeletonThickness = thickness
+end
+
+function BoxESP:SetShowSkeleton(state)
+    ESPSettings.ShowSkeleton = state
+end
+
+return BoxESP
