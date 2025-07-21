@@ -7,7 +7,7 @@ local Camera = workspace.CurrentCamera
 local localPlayer = Players.LocalPlayer
 
 ESP.ESPSettings = {
-    Enabled = true,
+    Enabled = false,
     LocalPlayerESPEnabled = false,      -- toggle local player ESP
     BoxESPEnabled = true,
     BoxType = "Box",                    -- "Box" or "Corner" (currently only Box implemented)
